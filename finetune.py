@@ -1,3 +1,10 @@
+from peft import (
+    prepare_model_for_int8_training,
+    LoraConfig,
+    get_peft_model,
+    get_peft_model_state_dict,
+)
+from transformers import LlamaForCausalLM, LlamaTokenizer
 import os
 import sys
 from typing import List
@@ -12,13 +19,6 @@ import transformers
 assert (
     "LlamaTokenizer" in transformers._import_structure["models.llama"]
 ), "LLaMA is now in HuggingFace's main branch.\nPlease reinstall it: pip uninstall transformers && pip install git+https://github.com/huggingface/transformers.git"
-from transformers import LlamaForCausalLM, LlamaTokenizer
-from peft import (
-    prepare_model_for_int8_training,
-    LoraConfig,
-    get_peft_model,
-    get_peft_model_state_dict,
-)
 
 
 def train(
@@ -63,6 +63,12 @@ def train(
         f"train_on_inputs: {train_on_inputs}\n"
         f"group_by_length: {group_by_length}\n"
     )
+
+    #
+    #
+    # Model
+    #
+    #
     assert (
         base_model
     ), "Please specify a --base_model, e.g. --base_model='decapoda-research/llama-7b-hf'"
@@ -81,11 +87,32 @@ def train(
         device_map=device_map,
     )
 
-    tokenizer = LlamaTokenizer.from_pretrained(base_model)
+    model = prepare_model_for_int8_training(model)
 
+    config = LoraConfig(
+        r=lora_r,
+        lora_alpha=lora_alpha,
+        target_modules=lora_target_modules,
+        lora_dropout=lora_dropout,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+    model = get_peft_model(model, config)
+
+    #
+    #
+    # Tokenizer
+    #
+    #
+    tokenizer = LlamaTokenizer.from_pretrained(base_model)
     tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
     tokenizer.padding_side = "left"  # Allow batched inference
 
+    #
+    #
+    # Dataset
+    #
+    #
     def tokenize(prompt, add_eos_token=True):
         # there's probably a way to do this with the tokenizer settings
         # but again, gotta move fast
@@ -123,30 +150,22 @@ def train(
             ]  # could be sped up, probably
         return tokenized_full_prompt
 
-    model = prepare_model_for_int8_training(model)
-
-    config = LoraConfig(
-        r=lora_r,
-        lora_alpha=lora_alpha,
-        target_modules=lora_target_modules,
-        lora_dropout=lora_dropout,
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
-    model = get_peft_model(model, config)
-
     data = load_dataset("json", data_files=data_path)
+    dataset = data["train"].map(generate_and_tokenize_prompt)
 
     if val_set_size > 0:
-        train_val = data["train"].train_test_split(
-            test_size=val_set_size, shuffle=True, seed=42
-        )
-        train_data = train_val["train"].shuffle().map(generate_and_tokenize_prompt)
-        val_data = train_val["test"].shuffle().map(generate_and_tokenize_prompt)
+        train_val = dataset.train_test_split(test_size=val_set_size, shuffle=True, seed=0)
+        train_data = train_val["train"]
+        val_data = train_val["test"]
     else:
-        train_data = data["train"].shuffle().map(generate_and_tokenize_prompt)
+        train_data = dataset["train"]
         val_data = None
 
+    #
+    #
+    # Train loop
+    #
+    #
     trainer = transformers.Trainer(
         model=model,
         train_dataset=train_data,
@@ -177,7 +196,8 @@ def train(
 
     old_state_dict = model.state_dict
     model.state_dict = (
-        lambda self, *_, **__: get_peft_model_state_dict(self, old_state_dict())
+        lambda self, *
+        _, **__: get_peft_model_state_dict(self, old_state_dict())
     ).__get__(model, type(model))
 
     if torch.__version__ >= "2" and sys.platform != "win32":
