@@ -101,6 +101,9 @@ def train(
     )
     model = get_peft_model(model, config)
 
+    print('====================')
+    print(model.hf_device_map)
+
     #
     #
     # Tokenizer
