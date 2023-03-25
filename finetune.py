@@ -81,6 +81,8 @@ def train(
         device_map = {"": int(os.environ.get("LOCAL_RANK") or 0)}
         gradient_accumulation_steps = gradient_accumulation_steps // world_size
 
+    print(device_map)
+
     model = LlamaForCausalLM.from_pretrained(
         base_model,
         load_in_8bit=True,
