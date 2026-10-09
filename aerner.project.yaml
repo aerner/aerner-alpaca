@@ -1,9 +1,24 @@
 version: 1
-summary: Instruct-tune LLaMA on consumer hardware
+summary: Python code for instruction fine-tuning LLaMA with LoRA, running inference through a Gradio interface, and exporting merged checkpoints for other inference tools.
 aliases:
 - alpaca
-status: unknown
+- Alpaca-LoRA
+- LLaMA LoRA fine-tuning
+status: active
 work:
 - investigate
+- edit
+- build
 references:
 - README.md
+- finetune.py
+- generate.py
+- export_hf_checkpoint.py
+- export_state_dict_checkpoint.py
+- requirements.txt
+provenance:
+  source_commit: 77114aff5727afa351c89edf868bb50379a20ea8
+  generator: metadata-agent-v1
+  policy_version: 2026-10-09.1
+  knowledge_ids:
+  - 5beafd45-1064-43b6-8577-87c37fffa681
