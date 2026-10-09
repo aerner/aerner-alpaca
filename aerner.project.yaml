@@ -1,0 +1,9 @@
+version: 1
+summary: Instruct-tune LLaMA on consumer hardware
+aliases:
+- alpaca
+status: unknown
+work:
+- investigate
+references:
+- README.md
